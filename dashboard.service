@@ -1,0 +1,23 @@
+[Unit]
+Description=FireFetch Dashboard
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/ai/dashboard
+Environment=NODE_ENV=production
+Environment=PORT=3002
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dashboard
+
+[Install]
+WantedBy=multi-user.target

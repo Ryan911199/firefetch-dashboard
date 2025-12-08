@@ -1,0 +1,653 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 import React, \{ useState, useEffect \} from 'react';\
+import \{ \
+  Activity, \
+  Server, \
+  Database, \
+  Network, \
+  Cpu, \
+  HardDrive, \
+  Box, \
+  Settings, \
+  Bell, \
+  Search, \
+  Menu, \
+  X,\
+  ShieldCheck,\
+  Globe,\
+  Wifi,\
+  MoreVertical,\
+  Play,\
+  Square,\
+  RefreshCw,\
+  Terminal,\
+  Zap\
+\} from 'lucide-react';\
+\
+// --- Types & Interfaces ---\
+interface Container \{\
+  id: string;\
+  name: string;\
+  image: string;\
+  status: 'running' | 'stopped' | 'restarting';\
+  cpu: number;\
+  memory: number;\
+  uptime: string;\
+  port: number;\
+\}\
+\
+interface Service \{\
+  name: string;\
+  url: string;\
+  icon: any;\
+  status: 'healthy' | 'warning' | 'down';\
+  category: 'media' | 'admin' | 'network' | 'home';\
+\}\
+\
+interface SystemStats \{\
+  cpuUsage: number;\
+  memUsage: number;\
+  temp: number;\
+  networkUp: number;\
+  networkDown: number;\
+  uptime: string;\
+\}\
+\
+// --- Mock Data Generators ---\
+const MOCK_CONTAINERS: Container[] = [\
+  \{ id: 'c1', name: 'plex-server', image: 'plexinc/pms-docker:latest', status: 'running', cpu: 12.5, memory: 2048, uptime: '4d 12h', port: 32400 \},\
+  \{ id: 'c2', name: 'pihole', image: 'pihole/pihole:v5.0', status: 'running', cpu: 1.2, memory: 128, uptime: '12d 4h', port: 53 \},\
+  \{ id: 'c3', name: 'home-assistant', image: 'homeassistant/home-assistant:stable', status: 'running', cpu: 5.4, memory: 512, uptime: '2d 1h', port: 8123 \},\
+  \{ id: 'c4', name: 'grafana', image: 'grafana/grafana:latest', status: 'stopped', cpu: 0, memory: 0, uptime: '0s', port: 3000 \},\
+  \{ id: 'c5', name: 'nextcloud', image: 'nextcloud:25', status: 'running', cpu: 8.1, memory: 1024, uptime: '1d 9h', port: 8080 \},\
+  \{ id: 'c6', name: 'qbittorrent', image: 'linuxserver/qbittorrent', status: 'running', cpu: 2.3, memory: 350, uptime: '5d 22h', port: 8080 \},\
+  \{ id: 'c7', name: 'radarr', image: 'linuxserver/radarr', status: 'running', cpu: 1.5, memory: 400, uptime: '5d 22h', port: 7878 \},\
+];\
+\
+const MOCK_SERVICES: Service[] = [\
+  \{ name: 'Plex Media', url: 'http://192.168.1.10:32400', icon: Play, status: 'healthy', category: 'media' \},\
+  \{ name: 'Pi-hole', url: 'http://192.168.1.11/admin', icon: ShieldCheck, status: 'healthy', category: 'network' \},\
+  \{ name: 'Home Assistant', url: 'http://192.168.1.12:8123', icon: Box, status: 'warning', category: 'home' \},\
+  \{ name: 'TrueNAS Core', url: 'https://192.168.1.5', icon: Database, status: 'healthy', category: 'admin' \},\
+  \{ name: 'Portainer', url: 'https://192.168.1.10:9443', icon: Server, status: 'healthy', category: 'admin' \},\
+  \{ name: 'Traefik', url: 'http://192.168.1.10:8080', icon: Globe, status: 'healthy', category: 'network' \},\
+];\
+\
+// --- Sub-Components ---\
+\
+const SidebarItem = (\{ icon: Icon, label, active, onClick, collapsed \}: any) => (\
+  <button\
+    onClick=\{onClick\}\
+    className=\{`flex items-center w-full p-3 mb-2 rounded-xl transition-all duration-300 group relative overflow-hidden\
+      $\{active \
+        ? 'text-white shadow-lg shadow-purple-500/20' \
+        : 'text-gray-400 hover:text-gray-100 hover:bg-white/5'\
+      \}`\}\
+  >\
+    \{active && (\
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-600/80 to-purple-600/80 opacity-100" />\
+    )\}\
+    <div className="relative z-10 flex items-center w-full">\
+      <Icon size=\{20\} className=\{`shrink-0 transition-colors $\{active ? 'text-white' : 'text-gray-400 group-hover:text-white'\}`\} />\
+      \{!collapsed && <span className="ml-3 font-medium text-sm whitespace-nowrap opacity-100 transition-opacity duration-300">\{label\}</span>\}\
+    </div>\
+  </button>\
+);\
+\
+const ProgressBar = (\{ value, colorStart = 'blue', colorEnd = 'purple', label, subLabel \}: \{ value: number, colorStart?: string, colorEnd?: string, label?: string, subLabel?: string \}) => \{\
+  return (\
+    <div className="w-full">\
+      <div className="flex justify-between mb-2">\
+        \{label && <span className="text-xs font-medium text-gray-300">\{label\}</span>\}\
+        \{subLabel && <span className="text-xs font-mono text-gray-400/80">\{subLabel\}</span>\}\
+      </div>\
+      <div className="w-full bg-slate-900/50 rounded-full h-2.5 overflow-hidden border border-white/5">\
+        <div \
+          className=\{`h-full rounded-full transition-all duration-700 ease-out shadow-lg shadow-$\{colorStart\}-500/30`\}\
+          style=\{\{ \
+            width: `$\{value\}%`,\
+            backgroundImage: `linear-gradient(to right, var(--tw-gradient-stops))`,\
+          \}\}\
+        >\
+          <div className=\{`w-full h-full bg-gradient-to-r from-$\{colorStart\}-500 to-$\{colorEnd\}-500 relative overflow-hidden`\}>\
+            <div className="absolute inset-0 bg-white/20 animate-pulse-slow"></div>\
+          </div>\
+        </div>\
+      </div>\
+    </div>\
+  );\
+\};\
+\
+// Simple Sparkline Component for Network Traffic\
+const Sparkline = (\{ data, color = "#a855f7" \}: \{ data: number[], color?: string \}) => \{\
+  const max = Math.max(...data, 10);\
+  const min = 0;\
+  const height = 40;\
+  const width = 120;\
+  \
+  const points = data.map((val, i) => \{\
+    const x = (i / (data.length - 1)) * width;\
+    const y = height - ((val - min) / (max - min)) * height;\
+    return `$\{x\},$\{y\}`;\
+  \}).join(' ');\
+\
+  return (\
+    <svg width="100%" height=\{height\} viewBox=\{`0 0 $\{width\} $\{height\}`\} className="overflow-visible filter drop-shadow-md">\
+      <defs>\
+        <linearGradient id=\{`gradient-$\{color\}`\} x1="0" x2="0" y1="0" y2="1">\
+          <stop offset="0%" stopColor=\{color\} stopOpacity="0.5" />\
+          <stop offset="100%" stopColor=\{color\} stopOpacity="0" />\
+        </linearGradient>\
+      </defs>\
+      <polyline\
+        fill="none"\
+        stroke=\{color\}\
+        strokeWidth="2"\
+        points=\{points\}\
+        strokeLinecap="round"\
+        strokeLinejoin="round"\
+      />\
+      <path \
+        d=\{`M 0 $\{height\} L $\{points\} L $\{width\} $\{height\} Z`\} \
+        fill=\{`url(#gradient-$\{color\})`\}\
+        stroke="none" \
+      />\
+    </svg>\
+  );\
+\};\
+\
+// --- Main Application ---\
+\
+export default function HomeLabDashboard() \{\
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'containers' | 'network' | 'storage'>('dashboard');\
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);\
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);\
+  const [loading, setLoading] = useState(false);\
+  \
+  // Simulated Live Data State\
+  const [systemStats, setSystemStats] = useState<SystemStats>(\{\
+    cpuUsage: 15,\
+    memUsage: 32,\
+    temp: 42,\
+    networkUp: 1.2, // Mbps\
+    networkDown: 5.4, // Mbps\
+    uptime: '14d 2h 12m'\
+  \});\
+  \
+  const [netHistory, setNetHistory] = useState<number[]>(new Array(20).fill(5));\
+\
+  // Simulation Effect\
+  useEffect(() => \{\
+    const interval = setInterval(() => \{\
+      setSystemStats(prev => (\{\
+        ...prev,\
+        cpuUsage: Math.min(100, Math.max(5, prev.cpuUsage + (Math.random() * 10 - 5))),\
+        memUsage: Math.min(100, Math.max(20, prev.memUsage + (Math.random() * 4 - 2))),\
+        temp: Math.min(90, Math.max(30, prev.temp + (Math.random() * 2 - 1))),\
+        networkDown: Math.max(0, prev.networkDown + (Math.random() * 5 - 2.5)),\
+        networkUp: Math.max(0, prev.networkUp + (Math.random() * 2 - 1)),\
+      \}));\
+\
+      setNetHistory(prev => \{\
+        const newArr = [...prev.slice(1), Math.random() * 100];\
+        return newArr;\
+      \});\
+    \}, 2000);\
+\
+    return () => clearInterval(interval);\
+  \}, []);\
+\
+  const toggleContainer = (id: string) => \{\
+    setLoading(true);\
+    // Simulate API delay\
+    setTimeout(() => setLoading(false), 800);\
+  \};\
+\
+  const renderDashboard = () => (\
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in pb-10">\
+      \{/* Top Row: Key Metrics */\}\
+      <div className="col-span-1 lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">\
+        \{/* CPU Card */\}\
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl relative overflow-hidden group">\
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity group-hover:opacity-75"></div>\
+          \
+          <div className="flex justify-between items-start mb-6 relative">\
+            <div>\
+              <p className="text-gray-400 text-sm font-medium flex items-center gap-2"><Cpu size=\{14\}/> CPU Load</p>\
+              <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mt-2">\{systemStats.cpuUsage.toFixed(1)\}%</h3>\
+            </div>\
+            <div className="p-3 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/5 rounded-xl shadow-inner">\
+              <Zap className="text-blue-400" size=\{24\} />\
+            </div>\
+          </div>\
+          <ProgressBar value=\{systemStats.cpuUsage\} colorStart="blue" colorEnd="indigo" subLabel="AMD Ryzen 9 5950X" />\
+        </div>\
+\
+        \{/* Memory Card */\}\
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl relative overflow-hidden group">\
+          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-opacity group-hover:opacity-75"></div>\
+          \
+          <div className="flex justify-between items-start mb-6 relative">\
+            <div>\
+              <p className="text-gray-400 text-sm font-medium flex items-center gap-2"><Activity size=\{14\}/> Memory</p>\
+              <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mt-2">\{systemStats.memUsage.toFixed(1)\}%</h3>\
+            </div>\
+            <div className="p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-white/5 rounded-xl shadow-inner">\
+              <Box className="text-purple-400" size=\{24\} />\
+            </div>\
+          </div>\
+          <ProgressBar value=\{systemStats.memUsage\} colorStart="purple" colorEnd="fuchsia" subLabel="24.1 / 64 GB" />\
+        </div>\
+\
+        \{/* Temperature Card */\}\
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl relative overflow-hidden">\
+          <div className="flex justify-between items-start mb-6">\
+            <div>\
+              <p className="text-gray-400 text-sm font-medium flex items-center gap-2"><Activity size=\{14\}/> Temp</p>\
+              <h3 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mt-2">\{systemStats.temp.toFixed(1)\}\'b0C</h3>\
+            </div>\
+            <div className=\{`p-3 rounded-xl border border-white/5 shadow-inner transition-colors duration-500 $\{systemStats.temp > 70 ? 'bg-red-500/20' : 'bg-emerald-500/20'\}`\}>\
+              <Activity className=\{systemStats.temp > 70 ? 'text-red-400' : 'text-emerald-400'\} size=\{24\} />\
+            </div>\
+          </div>\
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-400 bg-black/20 p-2 rounded-lg border border-white/5">\
+             <span className="whitespace-nowrap">Fan Speed</span>\
+             <span className="text-white font-mono whitespace-nowrap">1200 RPM</span>\
+          </div>\
+          <div className="mt-4 text-xs text-gray-500 flex items-start gap-1.5">\
+            <div className=\{`mt-0.5 w-2 h-2 rounded-full shrink-0 $\{systemStats.temp > 70 ? 'bg-red-500' : 'bg-emerald-500'\}`\}></div>\
+            <span className="leading-tight">System is \{systemStats.temp > 70 ? 'running hot' : 'nominal'\}</span>\
+          </div>\
+        </div>\
+      </div>\
+\
+      \{/* Network Card (Spans vertical on large) */\}\
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl flex flex-col justify-between relative overflow-hidden">\
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-blue-900/10 pointer-events-none"></div>\
+        <div className="flex justify-between items-center mb-6">\
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">\
+            <Network className="text-blue-400" size=\{20\} />\
+            Network Traffic\
+          </h3>\
+          <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded border border-blue-500/30">Live</span>\
+        </div>\
+        \
+        <div className="space-y-8 relative z-10">\
+          <div>\
+            <div className="flex justify-between text-sm mb-2">\
+              <span className="text-gray-400 flex items-center"><Activity size=\{14\} className="mr-1 rotate-180 text-emerald-400"/> Download</span>\
+              <span className="text-white font-mono text-lg">\{systemStats.networkDown.toFixed(1)\} <span className="text-xs text-gray-500">MB/s</span></span>\
+            </div>\
+            <Sparkline data=\{netHistory\} color="#34d399" />\
+          </div>\
+\
+          <div>\
+            <div className="flex justify-between text-sm mb-2">\
+              <span className="text-gray-400 flex items-center"><Activity size=\{14\} className="mr-1 text-blue-400"/> Upload</span>\
+              <span className="text-white font-mono text-lg">\{systemStats.networkUp.toFixed(1)\} <span className="text-xs text-gray-500">MB/s</span></span>\
+            </div>\
+            <Sparkline data=\{netHistory.map(n => n * 0.4)\} color="#60a5fa" />\
+          </div>\
+        </div>\
+        \
+        <div className="mt-6 pt-4 border-t border-white/10 flex justify-between text-xs text-gray-500 font-mono">\
+          <span>eth0</span>\
+          <span>192.168.1.100</span>\
+        </div>\
+      </div>\
+\
+      \{/* Services Grid */\}\
+      <div className="col-span-1 lg:col-span-3">\
+        <div className="flex justify-between items-center mb-4 px-1">\
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">\
+            <Globe size=\{20\} className="text-purple-400"/> Hosted Services\
+          </h2>\
+          <button className="text-xs font-medium text-purple-300 hover:text-white transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-lg border border-purple-500/20">Manage All</button>\
+        </div>\
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">\
+          \{MOCK_SERVICES.map((service) => (\
+            <a \
+              key=\{service.name\} \
+              href="#"\
+              className="group bg-white/5 backdrop-blur-md hover:bg-white/10 border border-white/10 hover:border-purple-500/50 p-4 rounded-2xl transition-all duration-300 flex flex-col items-center justify-center text-center relative overflow-hidden shadow-lg hover:shadow-purple-500/10 hover:-translate-y-1"\
+            >\
+              <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>\
+              <div className=\{`absolute top-3 right-3 w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] $\{service.status === 'healthy' ? 'bg-emerald-400 shadow-emerald-400/50' : service.status === 'warning' ? 'bg-amber-400 shadow-amber-400/50' : 'bg-red-400 shadow-red-400/50'\}`\} />\
+              \
+              <div className="p-3 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl mb-3 shadow-inner ring-1 ring-white/10 group-hover:scale-110 transition-transform duration-300">\
+                <service.icon size=\{24\} className="text-gray-200" />\
+              </div>\
+              <h3 className="font-medium text-gray-200 text-sm group-hover:text-white transition-colors">\{service.name\}</h3>\
+              <span className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider font-semibold">\{service.category\}</span>\
+            </a>\
+          ))\}\
+        </div>\
+      </div>\
+\
+      \{/* Storage & Quick Logs */\}\
+      <div className="col-span-1 lg:col-span-2 bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl">\
+        <div className="flex justify-between items-center mb-6">\
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">\
+            <Database size=\{20\} className="text-purple-400" /> Storage Pools\
+          </h3>\
+        </div>\
+        <div className="space-y-6">\
+          <div>\
+            <div className="flex justify-between items-end mb-2">\
+              <div className="flex items-center gap-2">\
+                <HardDrive size=\{16\} className="text-gray-400" />\
+                <span className="text-white font-medium">Main Array (ZFS)</span>\
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded uppercase tracking-wider">Healthy</span>\
+              </div>\
+              <span className="text-sm text-gray-400">14.2 TB / 24.0 TB</span>\
+            </div>\
+            <div className="w-full bg-slate-900/50 rounded-full h-3 border border-white/5 overflow-hidden">\
+              <div className="bg-gradient-to-r from-blue-600 to-cyan-500 h-3 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" style=\{\{ width: '59%' \}\}></div>\
+            </div>\
+          </div>\
+          <div>\
+            <div className="flex justify-between items-end mb-2">\
+              <div className="flex items-center gap-2">\
+                <Zap size=\{16\} className="text-gray-400" />\
+                <span className="text-white font-medium">NVMe Cache</span>\
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded uppercase tracking-wider">Healthy</span>\
+              </div>\
+              <span className="text-sm text-gray-400">210 GB / 1000 GB</span>\
+            </div>\
+            <div className="w-full bg-slate-900/50 rounded-full h-3 border border-white/5 overflow-hidden">\
+              <div className="bg-gradient-to-r from-purple-600 to-pink-500 h-3 rounded-full shadow-[0_0_10px_rgba(147,51,234,0.5)]" style=\{\{ width: '21%' \}\}></div>\
+            </div>\
+          </div>\
+        </div>\
+      </div>\
+\
+      <div className="col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-xl flex flex-col">\
+        <div className="flex justify-between items-center mb-4">\
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">\
+            <Terminal size=\{18\} className="text-gray-400" /> Recent Events\
+          </h3>\
+        </div>\
+        <div className="flex-1 overflow-y-auto space-y-4 max-h-[200px] text-sm pr-2 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">\
+          <div className="flex gap-3 group">\
+            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>\
+            <div>\
+              <span className="text-xs text-gray-500 font-mono block mb-0.5">10:42 AM</span>\
+              <span className="text-gray-300 group-hover:text-white transition-colors">Daily backup completed successfully.</span>\
+            </div>\
+          </div>\
+          <div className="flex gap-3 group">\
+            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></div>\
+            <div>\
+              <span className="text-xs text-gray-500 font-mono block mb-0.5">09:15 AM</span>\
+              <span className="text-amber-200/90 group-hover:text-amber-100 transition-colors">Container 'grafana' stopped unexpectedly.</span>\
+            </div>\
+          </div>\
+          <div className="flex gap-3 group">\
+            <div className="mt-1 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 shadow-[0_0_5px_rgba(59,130,246,0.5)]"></div>\
+            <div>\
+              <span className="text-xs text-gray-500 font-mono block mb-0.5">08:00 AM</span>\
+              <span className="text-gray-300 group-hover:text-white transition-colors">System update available (v2.4.1).</span>\
+            </div>\
+          </div>\
+        </div>\
+      </div>\
+    </div>\
+  );\
+\
+  const renderContainers = () => (\
+    <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden animate-fade-in shadow-2xl">\
+      <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white/5">\
+        <div className="flex items-center gap-3">\
+          <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg shadow-blue-500/20">\
+            <Box className="text-white" size=\{20\} />\
+          </div>\
+          <h2 className="text-xl font-bold text-white">Docker Containers</h2>\
+          <span className="bg-white/10 border border-white/5 text-gray-300 text-xs px-2 py-1 rounded-full">\{MOCK_CONTAINERS.length\} Total</span>\
+        </div>\
+        <div className="flex gap-3 w-full sm:w-auto">\
+          <div className="relative flex-1 sm:flex-none">\
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" size=\{16\} />\
+            <input \
+              type="text" \
+              placeholder="Search..." \
+              className="w-full sm:w-64 bg-black/20 border border-white/10 text-gray-300 text-sm rounded-xl pl-9 pr-4 py-2 focus:ring-2 focus:ring-purple-500/50 outline-none transition-all placeholder:text-gray-600" \
+            />\
+          </div>\
+          <button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40">\
+            Add Container\
+          </button>\
+        </div>\
+      </div>\
+      \
+      <div className="overflow-x-auto">\
+        <table className="w-full text-left border-collapse">\
+          <thead>\
+            <tr className="bg-black/20 border-b border-white/5 text-gray-400 text-xs uppercase tracking-wider">\
+              <th className="p-4 font-medium pl-6">Status</th>\
+              <th className="p-4 font-medium">Name</th>\
+              <th className="p-4 font-medium hidden md:table-cell">Image</th>\
+              <th className="p-4 font-medium hidden sm:table-cell">Port</th>\
+              <th className="p-4 font-medium hidden lg:table-cell">CPU / Mem</th>\
+              <th className="p-4 font-medium text-right pr-6">Actions</th>\
+            </tr>\
+          </thead>\
+          <tbody className="divide-y divide-white/5">\
+            \{MOCK_CONTAINERS.map((container) => (\
+              <tr key=\{container.id\} className="hover:bg-white/5 transition-colors group">\
+                <td className="p-4 pl-6">\
+                  <div className=\{`flex items-center gap-2 text-sm font-medium $\{container.status === 'running' ? 'text-emerald-400' : 'text-gray-500'\}`\}>\
+                    <div className="relative">\
+                       \{container.status === 'running' && <div className="absolute inset-0 bg-emerald-400 blur-[2px] opacity-50 animate-pulse"></div>\}\
+                       \{container.status === 'running' ? <Play size=\{16\} fill="currentColor" /> : <Square size=\{16\} fill="currentColor" />\}\
+                    </div>\
+                    <span className="capitalize">\{container.status\}</span>\
+                  </div>\
+                </td>\
+                <td className="p-4">\
+                  <div className="text-white font-medium">\{container.name\}</div>\
+                  <div className="text-xs text-gray-500 lg:hidden">\{container.image\}</div>\
+                </td>\
+                <td className="p-4 hidden md:table-cell">\
+                  <span className="text-gray-400 text-sm font-mono bg-black/20 px-2 py-1 rounded border border-white/5">\{container.image\}</span>\
+                </td>\
+                <td className="p-4 hidden sm:table-cell">\
+                  <span className="text-gray-300 text-sm font-mono opacity-70">:\{container.port\}</span>\
+                </td>\
+                <td className="p-4 hidden lg:table-cell">\
+                  <div className="flex items-center gap-4">\
+                    <div className="w-24">\
+                      <div className="text-[10px] text-gray-400 mb-1 flex justify-between">\
+                        <span>CPU</span>\
+                        <span>\{container.cpu\}%</span>\
+                      </div>\
+                      <div className="w-full bg-slate-900/50 rounded-full h-1.5 overflow-hidden">\
+                        <div className="bg-gradient-to-r from-blue-500 to-blue-400 h-1.5 rounded-full" style=\{\{ width: `$\{container.cpu\}%` \}\}></div>\
+                      </div>\
+                    </div>\
+                    <div className="w-24">\
+                      <div className="text-[10px] text-gray-400 mb-1 flex justify-between">\
+                        <span>MEM</span>\
+                        <span>\{container.memory\}M</span>\
+                      </div>\
+                      <div className="w-full bg-slate-900/50 rounded-full h-1.5 overflow-hidden">\
+                        <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-1.5 rounded-full" style=\{\{ width: `$\{(container.memory / 4096) * 100\}%` \}\}></div>\
+                      </div>\
+                    </div>\
+                  </div>\
+                </td>\
+                <td className="p-4 text-right pr-6">\
+                  <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">\
+                    <button \
+                      onClick=\{() => toggleContainer(container.id)\}\
+                      className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"\
+                      title="Restart"\
+                    >\
+                      <RefreshCw size=\{16\} className=\{loading ? 'animate-spin' : ''\} />\
+                    </button>\
+                    <button className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors" title="Logs">\
+                      <Terminal size=\{16\} />\
+                    </button>\
+                    <button className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors" title="Settings">\
+                      <MoreVertical size=\{16\} />\
+                    </button>\
+                  </div>\
+                </td>\
+              </tr>\
+            ))\}\
+          </tbody>\
+        </table>\
+      </div>\
+    </div>\
+  );\
+\
+  return (\
+    <div className="flex h-screen bg-[#0f172a] text-gray-100 font-sans overflow-hidden selection:bg-purple-500/30">\
+      \{/* Dynamic Background */\}\
+      <div className="fixed inset-0 pointer-events-none">\
+         <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-purple-900/20 rounded-full blur-[120px] opacity-50"></div>\
+         <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-900/10 rounded-full blur-[120px] opacity-30"></div>\
+      </div>\
+\
+      \{/* Mobile Sidebar Overlay */\}\
+      \{mobileMenuOpen && (\
+        <div \
+          className="fixed inset-0 bg-black/60 z-20 lg:hidden backdrop-blur-sm transition-opacity"\
+          onClick=\{() => setMobileMenuOpen(false)\}\
+        />\
+      )\}\
+\
+      \{/* Sidebar */\}\
+      <aside \
+        className=\{`fixed lg:static z-30 h-full bg-slate-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 flex flex-col shadow-2xl\
+          $\{sidebarCollapsed ? 'w-20' : 'w-72'\}\
+          $\{mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'\}\
+        `\}\
+      >\
+        <div className="h-20 flex items-center justify-between px-6 border-b border-white/5 bg-white/5">\
+          <div className="flex items-center gap-3 overflow-hidden">\
+            <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-purple-500/20">\
+              <Server size=\{22\} className="text-white" />\
+            </div>\
+            \{!sidebarCollapsed && (\
+              <div className="flex flex-col">\
+                <span className="font-bold text-lg tracking-tight leading-none text-white">Nexus<span className="text-purple-400">Lab</span></span>\
+                <span className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Dashboard</span>\
+              </div>\
+            )\}\
+          </div>\
+          <button \
+            onClick=\{() => setSidebarCollapsed(!sidebarCollapsed)\} \
+            className="text-gray-500 hover:text-white hidden lg:block p-1 hover:bg-white/5 rounded-lg transition-colors"\
+          >\
+            \{sidebarCollapsed ? <Menu size=\{20\} /> : <X size=\{20\} />\}\
+          </button>\
+        </div>\
+\
+        <div className="flex-1 py-8 px-4 overflow-y-auto">\
+          <div className="space-y-1">\
+            <SidebarItem icon=\{Activity\} label="Overview" active=\{activeTab === 'dashboard'\} onClick=\{() => setActiveTab('dashboard')\} collapsed=\{sidebarCollapsed\} />\
+            <SidebarItem icon=\{Box\} label="Containers" active=\{activeTab === 'containers'\} onClick=\{() => setActiveTab('containers')\} collapsed=\{sidebarCollapsed\} />\
+            <SidebarItem icon=\{Network\} label="Network" active=\{activeTab === 'network'\} onClick=\{() => setActiveTab('network')\} collapsed=\{sidebarCollapsed\} />\
+            <SidebarItem icon=\{HardDrive\} label="Storage" active=\{activeTab === 'storage'\} onClick=\{() => setActiveTab('storage')\} collapsed=\{sidebarCollapsed\} />\
+          </div>\
+          \
+          \{!sidebarCollapsed && (\
+            <div className="mt-10 px-2 animate-fade-in">\
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 pl-2">System Status</h4>\
+              <div className="space-y-3">\
+                 <div className="flex items-center gap-3 text-sm text-gray-300 p-3 bg-white/5 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors cursor-pointer group">\
+                    <div className="relative">\
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>\
+                      <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-75"></div>\
+                    </div>\
+                    <div className="flex flex-col">\
+                      <span className="font-medium text-white group-hover:text-emerald-300 transition-colors">Primary Node</span>\
+                      <span className="text-[10px] text-gray-500">Uptime: 14d</span>\
+                    </div>\
+                 </div>\
+                 <div className="flex items-center gap-3 text-sm text-gray-300 p-3 bg-white/5 rounded-xl border border-white/5 hover:border-blue-500/30 transition-colors cursor-pointer group">\
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>\
+                    <div className="flex flex-col">\
+                      <span className="font-medium text-white group-hover:text-blue-300 transition-colors">Backup NAS</span>\
+                      <span className="text-[10px] text-gray-500">Syncing...</span>\
+                    </div>\
+                 </div>\
+              </div>\
+            </div>\
+          )\}\
+        </div>\
+\
+        <div className="p-4 border-t border-white/5 bg-black/10">\
+          <SidebarItem icon=\{Settings\} label="Settings" active=\{false\} onClick=\{() => \{\}\} collapsed=\{sidebarCollapsed\} />\
+          \{!sidebarCollapsed && (\
+            <div className="mt-4 flex items-center gap-3 px-3 py-2 bg-white/5 rounded-xl border border-white/5">\
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 ring-2 ring-white/10"></div>\
+              <div className="overflow-hidden">\
+                <div className="text-xs font-bold text-white">Admin User</div>\
+                <div className="text-[10px] text-gray-400 truncate">admin@nexuslab.local</div>\
+              </div>\
+            </div>\
+          )\}\
+        </div>\
+      </aside>\
+\
+      \{/* Main Content */\}\
+      <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10">\
+        \{/* Header */\}\
+        <header className="h-20 flex items-center justify-between px-6 z-10 shrink-0">\
+          <div className="flex items-center gap-4">\
+            <button \
+              className="lg:hidden text-gray-400 hover:text-white p-2 hover:bg-white/5 rounded-lg"\
+              onClick=\{() => setMobileMenuOpen(true)\}\
+            >\
+              <Menu size=\{24\} />\
+            </button>\
+            <div className="flex flex-col">\
+              <h1 className="text-2xl font-bold text-white capitalize tracking-tight">\
+                \{activeTab === 'dashboard' ? 'System Overview' : activeTab\}\
+              </h1>\
+              <p className="text-xs text-gray-400 hidden sm:block">Welcome back, system performance is nominal.</p>\
+            </div>\
+          </div>\
+          \
+          <div className="flex items-center gap-4">\
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">\
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>\
+              <span className="text-xs font-bold text-emerald-400 tracking-wide uppercase">Online</span>\
+            </div>\
+            <button className="text-gray-400 hover:text-white relative p-2 hover:bg-white/5 rounded-full transition-colors">\
+              <Bell size=\{20\} />\
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-slate-900 shadow-sm"></span>\
+            </button>\
+          </div>\
+        </header>\
+\
+        \{/* Scrollable Area */\}\
+        <div className="flex-1 overflow-y-auto px-6 pb-6 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20 scrollbar-track-transparent">\
+          <div className="max-w-7xl mx-auto h-full">\
+            \{activeTab === 'dashboard' && renderDashboard()\}\
+            \{activeTab === 'containers' && renderContainers()\}\
+            \{(activeTab === 'network' || activeTab === 'storage') && (\
+              <div className="flex flex-col items-center justify-center h-[60vh] text-gray-500 border-2 border-dashed border-white/10 rounded-3xl bg-white/5 backdrop-blur-sm animate-fade-in">\
+                 <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-full mb-6 shadow-2xl shadow-black/20 ring-1 ring-white/5">\
+                    \{activeTab === 'network' ? <Network size=\{48\} className="text-blue-500"/> : <HardDrive size=\{48\} className="text-purple-500"/>\}\
+                 </div>\
+                 <h2 className="text-2xl font-bold text-white mb-2">Work in Progress</h2>\
+                 <p className="text-gray-400 max-w-md text-center mb-8">The \{activeTab\} module is currently being upgraded with the new glassmorphic design system.</p>\
+                 <button className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all border border-white/10 hover:border-white/20 shadow-lg" onClick=\{() => setActiveTab('dashboard')\}>\
+                    Return to Dashboard\
+                 </button>\
+              </div>\
+            )\}\
+          </div>\
+        </div>\
+      </main>\
+    </div>\
+  );\
+\}}

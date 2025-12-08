@@ -1,0 +1,8 @@
+[Unit]
+Description=Update Dashboard Cache
+After=network.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/ubuntu/ai/dashboard/scripts/update-cache.sh
+User=ubuntu
