@@ -1,23 +1,30 @@
 # FireFetch Dashboard
 
-A custom server monitoring and service management dashboard for the AI Homebase.
-
-## Quick Reference
-
 | Property | Value |
 |----------|-------|
+| **Path** | `/home/ubuntu/ai/dashboard/` |
 | **URL** | https://dashboard.firefetch.org |
-| **Local** | http://localhost:3002 |
-| **Tech Stack** | Next.js 14, React, Tailwind CSS |
 | **Port** | 3002 |
+| **Status** | Active |
+| **Tech** | Next.js 14, React, Tailwind CSS |
 
-## Project Overview
+## Quick Commands
 
-This dashboard provides:
-- **Real-time system metrics** (CPU, RAM, disk, network)
-- **Service status monitoring** (from services.json)
-- **Docker container monitoring** (via Docker API)
-- **Modern dark mode UI** with sleek design
+| Action | Command |
+|--------|---------|
+| Dev | `cd /home/ubuntu/ai/dashboard && npm run dev` |
+| Build | `cd /home/ubuntu/ai/dashboard && npm run build` |
+| Deploy | `docker compose up -d --build` |
+| Logs | `docker logs firefetch-dashboard --tail 50` |
+| Status | `docker ps \| grep dashboard` |
+
+## Overview
+
+Server monitoring and service management dashboard. Features:
+- Real-time system metrics (CPU, RAM, disk, network)
+- Service status monitoring
+- Docker container monitoring
+- Dark mode UI
 
 ## Directory Structure
 
