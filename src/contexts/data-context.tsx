@@ -1,6 +1,19 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
+import {
+  getSocket,
+  subscribeToMetrics,
+  subscribeToContainers,
+  subscribeToServices,
+  subscribeToHistory,
+  transformMetrics,
+  transformContainers,
+  isConnected,
+  MetricsUpdate,
+  ContainerUpdate,
+  ServiceUpdate,
+} from "@/lib/socket-client";
 
 // Types
 export interface SystemMetrics {
@@ -15,9 +28,9 @@ export interface SystemMetrics {
 export interface ServiceData {
   id: string;
   name: string;
-  subdomain: string;
-  description: string;
-  internalPort: number;
+  subdomain?: string;
+  description?: string;
+  internalPort?: number;
   status: string;
   responseTime?: number;
   uptime?: number;
@@ -27,7 +40,7 @@ export interface ServiceData {
 export interface DockerContainerData {
   id: string;
   name: string;
-  image: string;
+  image?: string;
   status: string;
   cpu: number;
   memory: { used: number; limit: number };
@@ -44,47 +57,6 @@ export interface MetricsHistoryPoint {
   networkDown: number;
 }
 
-interface CachedData {
-  metrics: SystemMetrics | null;
-  services: ServiceData[];
-  containers: DockerContainerData[];
-  metricsHistory: MetricsHistoryPoint[];
-  netHistory: number[];
-  uploadHistory: number[];
-  timestamp: number;
-}
-
-const CACHE_KEY = "dashboard-data-cache";
-const CACHE_MAX_AGE = 5 * 60 * 1000; // 5 minutes max age for cache
-
-// Synchronously read from localStorage
-function getLocalStorageCache(): CachedData | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const data = JSON.parse(cached) as CachedData;
-      // Check if cache is not too old
-      if (Date.now() - data.timestamp < CACHE_MAX_AGE) {
-        return data;
-      }
-    }
-  } catch (e) {
-    console.error("Failed to read cache:", e);
-  }
-  return null;
-}
-
-// Save to localStorage
-function saveToLocalStorage(data: CachedData) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error("Failed to save cache:", e);
-  }
-}
-
 interface DataContextType {
   // Data
   metrics: SystemMetrics | null;
@@ -95,6 +67,7 @@ interface DataContextType {
   // State
   isLoading: boolean;
   isRefreshing: boolean;
+  isConnected: boolean;
   lastUpdate: Date;
 
   // Network history for sparklines
@@ -120,77 +93,26 @@ interface DataProviderProps {
   };
 }
 
-// Get initial state - prefer localStorage, fallback to server data
-function getInitialState(initialData?: DataProviderProps["initialData"]) {
-  const cached = getLocalStorageCache();
-
-  if (cached) {
-    return {
-      metrics: cached.metrics,
-      services: cached.services,
-      containers: cached.containers,
-      metricsHistory: cached.metricsHistory,
-      netHistory: cached.netHistory,
-      uploadHistory: cached.uploadHistory,
-      isLoading: false,
-    };
-  }
-
-  // Fallback to server initial data
-  const defaultNetHistory = new Array(20).fill(5);
-  const defaultUploadHistory = new Array(20).fill(2);
-
-  if (initialData?.metrics?.network?.down) {
-    defaultNetHistory[19] = initialData.metrics.network.down / 1024;
-  }
-  if (initialData?.metrics?.network?.up) {
-    defaultUploadHistory[19] = initialData.metrics.network.up / 1024;
-  }
-
-  return {
-    metrics: initialData?.metrics || null,
-    services: initialData?.services || [],
-    containers: initialData?.containers || [],
-    metricsHistory: initialData?.metricsHistory || [],
-    netHistory: defaultNetHistory,
-    uploadHistory: defaultUploadHistory,
-    isLoading: !initialData?.metrics,
-  };
-}
-
 export function DataProvider({ children, initialData }: DataProviderProps) {
-  // Initialize state synchronously from cache or server data
-  const initial = getInitialState(initialData);
+  // Initialize state
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(initialData?.metrics || null);
+  const [services, setServices] = useState<ServiceData[]>(initialData?.services || []);
+  const [containers, setContainers] = useState<DockerContainerData[]>(initialData?.containers || []);
+  const [metricsHistory, setMetricsHistory] = useState<MetricsHistoryPoint[]>(initialData?.metricsHistory || []);
 
-  const [metrics, setMetrics] = useState<SystemMetrics | null>(initial.metrics);
-  const [services, setServices] = useState<ServiceData[]>(initial.services);
-  const [containers, setContainers] = useState<DockerContainerData[]>(initial.containers);
-  const [metricsHistory, setMetricsHistory] = useState<MetricsHistoryPoint[]>(initial.metricsHistory);
-  const [netHistory, setNetHistory] = useState<number[]>(initial.netHistory);
-  const [uploadHistory, setUploadHistory] = useState<number[]>(initial.uploadHistory);
+  // Network history for sparklines (last 20 values)
+  const [netHistory, setNetHistory] = useState<number[]>(new Array(20).fill(5));
+  const [uploadHistory, setUploadHistory] = useState<number[]>(new Array(20).fill(2));
 
-  const [isLoading, setIsLoading] = useState(initial.isLoading);
+  const [isLoading, setIsLoading] = useState(!initialData?.metrics);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  // Track if we've done initial fetch
-  const hasInitialFetch = useRef(false);
+  // Track WebSocket setup
+  const socketSetup = useRef(false);
 
-  // Save to localStorage whenever data changes
-  useEffect(() => {
-    if (metrics || services.length > 0 || containers.length > 0) {
-      saveToLocalStorage({
-        metrics,
-        services,
-        containers,
-        metricsHistory,
-        netHistory,
-        uploadHistory,
-        timestamp: Date.now(),
-      });
-    }
-  }, [metrics, services, containers, metricsHistory, netHistory, uploadHistory]);
-
+  // REST API fallback functions
   const refreshMetrics = useCallback(async () => {
     try {
       const res = await fetch("/api/metrics");
@@ -199,6 +121,7 @@ export function DataProvider({ children, initialData }: DataProviderProps) {
         setMetrics(data);
         setNetHistory(prev => [...prev.slice(1), (data.network?.down || 0) / 1024]);
         setUploadHistory(prev => [...prev.slice(1), (data.network?.up || 0) / 1024]);
+        setLastUpdate(new Date());
       }
     } catch (error) {
       console.error("Failed to fetch metrics:", error);
@@ -250,41 +173,101 @@ export function DataProvider({ children, initialData }: DataProviderProps) {
         refreshContainers(),
         refreshHistory(),
       ]);
-      setLastUpdate(new Date());
     } finally {
       setIsRefreshing(false);
       setIsLoading(false);
     }
   }, [refreshMetrics, refreshServices, refreshContainers, refreshHistory]);
 
-  // Initial load and periodic refresh
+  // Set up WebSocket connection and subscriptions
   useEffect(() => {
-    // Only do initial fetch once
-    if (hasInitialFetch.current) return;
-    hasInitialFetch.current = true;
+    if (typeof window === "undefined" || socketSetup.current) return;
+    socketSetup.current = true;
 
-    // Always fetch fresh data in background, but don't block UI
-    // Small delay to let the UI render first with cached data
-    const timeoutId = setTimeout(() => {
-      refreshAll();
-    }, 100);
+    const socket = getSocket();
 
-    // Refresh all data every 30 seconds
-    const interval = setInterval(() => {
-      refreshAll();
+    // Connection status handlers
+    const handleConnect = () => {
+      console.log("[DataContext] WebSocket connected");
+      setConnected(true);
+    };
+
+    const handleDisconnect = () => {
+      console.log("[DataContext] WebSocket disconnected");
+      setConnected(false);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+
+    // Set initial connection state
+    setConnected(socket.connected);
+
+    // Subscribe to real-time updates
+    const unsubMetrics = subscribeToMetrics((data: MetricsUpdate) => {
+      const transformed = transformMetrics(data);
+      setMetrics(transformed);
+      setNetHistory(prev => [...prev.slice(1), (transformed.network?.down || 0) / 1024]);
+      setUploadHistory(prev => [...prev.slice(1), (transformed.network?.up || 0) / 1024]);
+      setLastUpdate(new Date());
+      setIsLoading(false);
+    });
+
+    const unsubContainers = subscribeToContainers((data: ContainerUpdate[]) => {
+      const transformed = transformContainers(data);
+      setContainers(transformed);
+    });
+
+    const unsubServices = subscribeToServices((data: ServiceUpdate[]) => {
+      setServices(prev => {
+        // Merge with existing service data to preserve metadata
+        return prev.map(existing => {
+          const update = data.find(s => s.service_id === existing.id);
+          if (update) {
+            return {
+              ...existing,
+              status: update.status,
+              responseTime: update.response_time,
+              uptime: update.uptime_percent ?? existing.uptime,
+            };
+          }
+          return existing;
+        });
+      });
+    });
+
+    const unsubHistory = subscribeToHistory((data: any[]) => {
+      const transformed = data.map((point) => ({
+        timestamp: point.timestamp,
+        cpu: point.cpu_percent || point.cpu,
+        memoryPercent: point.memory_percent || point.memoryPercent,
+        diskPercent: point.disk_percent || point.diskPercent,
+        networkUp: point.network_tx || point.networkUp,
+        networkDown: point.network_rx || point.networkDown,
+      }));
+      setMetricsHistory(transformed);
+    });
+
+    // Initial data fetch via REST (WebSocket will take over once data arrives)
+    refreshAll();
+
+    // Fallback polling for when WebSocket is disconnected
+    const pollInterval = setInterval(() => {
+      if (!isConnected()) {
+        refreshAll();
+      }
     }, 30000);
 
-    // Refresh history every 5 minutes
-    const historyInterval = setInterval(() => {
-      refreshHistory();
-    }, 5 * 60 * 1000);
-
     return () => {
-      clearTimeout(timeoutId);
-      clearInterval(interval);
-      clearInterval(historyInterval);
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      unsubMetrics();
+      unsubContainers();
+      unsubServices();
+      unsubHistory();
+      clearInterval(pollInterval);
     };
-  }, [refreshAll, refreshHistory]);
+  }, [refreshAll]);
 
   return (
     <DataContext.Provider
@@ -295,6 +278,7 @@ export function DataProvider({ children, initialData }: DataProviderProps) {
         metricsHistory,
         isLoading,
         isRefreshing,
+        isConnected: connected,
         lastUpdate,
         netHistory,
         uploadHistory,

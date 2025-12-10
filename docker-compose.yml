@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   dashboard:
     build:
@@ -7,16 +5,27 @@ services:
       dockerfile: Dockerfile
     container_name: firefetch-dashboard
     restart: unless-stopped
+    # Run as root for Docker socket access (alternatively could use group ID)
+    user: "0:0"
     ports:
       - "3002:3000"
     volumes:
-      # Mount services.json for live updates
-      - /home/ubuntu/ai/infrastructure/services.json:/app/data/services.json:ro
+      # Mount services.json (read-only, accessible to container)
+      - /home/ubuntu/ai/infrastructure/services.json:/app/config/services.json:ro
       # Mount Docker socket for container monitoring
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent volume for SQLite database
+      - dashboard-data:/app/data
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
+      - DB_PATH=/app/data
+      - SERVICES_CONFIG_PATH=/app/config/services.json
+      - PUSHOVER_USER_KEY=u78a9zhw1zm8cm29mrrsw3otjyh1gg
+      - PUSHOVER_APP_KEY=a5igw1desde333xwefcw7is3xv6jxp
+      - DOCKER_ENV=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - traefik-net
     healthcheck:
@@ -29,3 +38,7 @@ services:
 networks:
   traefik-net:
     external: true
+
+volumes:
+  dashboard-data:
+    driver: local

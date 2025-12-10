@@ -40,8 +40,8 @@ export function ServicesContent() {
       filtered = filtered.filter(
         (service) =>
           service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          service.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          service.subdomain.toLowerCase().includes(searchQuery.toLowerCase())
+          (service.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+          (service.subdomain?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
       );
     }
 

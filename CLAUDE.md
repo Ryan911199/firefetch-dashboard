@@ -6,7 +6,7 @@
 | **URL** | https://dashboard.firefetch.org |
 | **Port** | 3002 |
 | **Status** | Active |
-| **Tech** | Next.js 14, React, Tailwind CSS |
+| **Tech** | Next.js 14, React, Tailwind CSS, SQLite, Socket.IO |
 
 ## Quick Commands
 
@@ -20,11 +20,48 @@
 
 ## Overview
 
-Server monitoring and service management dashboard. Features:
-- Real-time system metrics (CPU, RAM, disk, network)
-- Service status monitoring
+Server monitoring and service management dashboard with real-time updates. Features:
+- **Real-time metrics** via WebSocket with decoupled intervals:
+  - UI updates: 2s (metrics), 5s (containers), 15s (services)
+  - Database storage: 5s (metrics), 10s (containers), 30s (services)
+- System metrics (CPU, RAM, disk, network, load average)
+- **Enhanced uptime tracking** with multi-timeframe views (24h/7d/30d/90d)
+  - Timeframe selector to switch between different periods
+  - Visual uptime history bars showing last 90 checks
+  - Color-coded status indicators (green/yellow/red)
+  - Public status page at `/status` with incident tracking
 - Docker container monitoring
+- **Push notifications** via Pushover for critical alerts
+- **Public status page** at `/status`
+- **Incident management** with severity tracking
+- **Historical data** stored in SQLite with automatic aggregation
+- Data retention: 24h live → 7d hourly → 30d daily
 - Dark mode UI
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Custom Server (server.ts)                 │
+│                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐│
+│  │ Metrics Collector│  │ SQLite Database │  │  WebSocket   ││
+│  │ (5s/10s/30s)     │──│ (dashboard.db)  │──│  Server      ││
+│  └─────────────────┘  └─────────────────┘  └──────────────┘│
+│           │                    │                    │        │
+│           │        ┌───────────┴───────────┐       │        │
+│           │        │   Aggregation         │       │        │
+│           │        │   Scheduler           │       │        │
+│           │        │   (hourly/daily)      │       │        │
+│           │        └───────────────────────┘       │        │
+│           │                                         │        │
+│           ▼                                         ▼        │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │              Next.js Application                         ││
+│  │  REST API + React Frontend + Socket.IO Client           ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Directory Structure
 
@@ -52,8 +89,15 @@ Server monitoring and service management dashboard. Features:
 │   │       ├── sidebar.tsx
 │   │       └── header.tsx
 │   └── lib/
+│       ├── database.ts           # SQLite database + uptime calculations
+│       ├── metrics-collector.ts  # Decoupled metrics collection
+│       ├── websocket-server.ts   # Socket.IO server
+│       ├── aggregation-scheduler.ts # Data rollup jobs
+│       ├── socket-client.ts      # Frontend WebSocket client
+│       ├── pushover.ts           # Pushover notification service
 │       ├── utils.ts              # Utility functions
 │       └── types.ts              # TypeScript types
+├── server.ts                     # Custom server with WebSocket
 ├── docker-compose.yml            # Docker deployment config
 ├── Dockerfile                    # Docker build config
 ├── tailwind.config.ts            # Tailwind configuration
@@ -83,6 +127,44 @@ docker compose up -d --build
 ```
 
 ## API Routes
+
+### GET /api/status
+Returns comprehensive service uptime data for the public status page.
+
+**Response:**
+```json
+{
+  "status": "operational",
+  "services": [
+    {
+      "service_id": "backend",
+      "service_name": "appwrite",
+      "current_status": "online",
+      "uptime_24h": 99.00,
+      "uptime_7d": 99.00,
+      "uptime_30d": 99.00,
+      "uptime_90d": 99.00,
+      "avg_response_time": 165.57,
+      "total_checks": 200,
+      "last_checked": 1765359061393
+    }
+  ],
+  "activeIncidents": [],
+  "recentIncidents": [],
+  "summary": {
+    "total": 7,
+    "online": 7,
+    "degraded": 0,
+    "offline": 0,
+    "avgUptime24h": 98.5
+  },
+  "lastUpdated": 1765359061400
+}
+```
+
+**Query Parameters:**
+- `service`: Service ID (optional) - Returns history for specific service
+- `hours`: Number of hours of history (default: 24)
 
 ### GET /api/services
 Returns all services with their current status.
@@ -208,69 +290,92 @@ The dashboard integrates with Appwrite for persistent storage:
 
 **Setup:** See `/home/ubuntu/ai/dashboard/APPWRITE_SETUP.md` for detailed setup instructions.
 
-### Uptime Kuma
-**Status:** Fully integrated with automated setup
+### Pushover Notifications
+**Status:** Active
 
-The dashboard is fully integrated with Uptime Kuma to provide comprehensive uptime monitoring:
-- **Uptime Widget:** Displays overall uptime statistics and individual monitor status
-- **Service Integration:** Merges Uptime Kuma data with service status checks
-- **Real-time Data:** Auto-refreshes every 60 seconds
-- **Automated Setup:** Script to create monitors and status page automatically
+Push notifications via Pushover for critical alerts:
+- Service status changes (offline/online/degraded)
+- Resource alerts (high CPU, memory, disk >90%)
+- Incident notifications
 
 **Configuration:**
-- Endpoint: http://localhost:3001 (or https://status.firefetch.org)
-- API Key: uk1_-uKYI9ZavqZ0eg82NLTBogjk-qy1uvwwlkEZPFH8
-- Status Page Slug: `firefetch`
-- Public Status Page: http://localhost:3001/status/firefetch
-- API Endpoint: http://localhost:3001/api/status-page/firefetch
+- User Key: Set via `PUSHOVER_USER_KEY` environment variable
+- App Key: Set via `PUSHOVER_APP_KEY` environment variable
 
 **Files:**
-- `/src/lib/config.ts` - Uptime Kuma configuration
-- `/src/lib/uptime-kuma.ts` - API helper functions (updated to use status page API)
-- `/src/app/api/uptime/route.ts` - Uptime data API endpoint
-- `/src/components/widgets/uptime-status.tsx` - Uptime status widget
-- `/scripts/setup-uptime-kuma.js` - Automated setup script
-- `/UPTIME_KUMA_SETUP.md` - Complete setup and integration guide
+- `/src/lib/pushover.ts` - Pushover notification service
+- `/src/app/api/notifications/test/route.ts` - Test endpoint
 
-**How it works:**
-1. Services API fetches data from Uptime Kuma status page API
-2. Falls back to direct HTTP checks if Uptime Kuma unavailable
-3. Uptime widget displays all monitors with status and metrics
-4. Auto-refreshes to show real-time status
-5. Uses public status page API (no authentication required for reads)
+**API Endpoints:**
+- `GET /api/notifications/test` - Check if Pushover is configured
+- `POST /api/notifications/test` - Send test notification
 
-**Quick Setup (Automated):**
-```bash
-# 1. Install dependencies
-npm install
+**Notification Types:**
+- Service offline: High priority with siren sound
+- Service recovered: Normal priority
+- Service degraded: Normal priority
+- High CPU/Memory (>90%): High priority
+- Low Disk Space (>90%): Emergency priority (requires acknowledgement)
 
-# 2. Set credentials
-export UPTIME_KUMA_USERNAME=admin
-export UPTIME_KUMA_PASSWORD=your_password
+### Public Status Page
+**Status:** Active
+**URL:** https://dashboard.firefetch.org/status
 
-# 3. Run setup
-npm run setup:uptime-kuma
-```
+Public-facing status page showing service health:
+- Overall system status (operational/degraded/partial_outage/major_outage)
+- Per-service uptime (24h/7d/30d percentages)
+- Active incidents
+- Recent incident history
+- Auto-refresh every 30 seconds
 
-This will:
-- Create HTTP monitors for all services in `/home/ubuntu/ai/infrastructure/services.json`
-- Configure 60-second check intervals
-- Create a public status page with slug "firefetch"
-- Add all monitors to the status page
+**Files:**
+- `/src/app/status/page.tsx` - Status page component
+- `/src/app/api/status/route.ts` - Status API endpoint
 
-**Manual Setup:**
-See `/home/ubuntu/ai/dashboard/UPTIME_KUMA_SETUP.md` for detailed manual setup instructions.
+**API Endpoints:**
+- `GET /api/status` - Overall status with all services
+- `GET /api/status?service=<id>&hours=24` - Service history
 
-**API Integration:**
-- Uses the public status page API: `/api/status-page/firefetch`
-- No authentication required for reading data
-- Returns monitor status, heartbeats, and uptime statistics
-- Fully compatible with the dashboard's uptime widget
+### Incidents API
+**Status:** Active
 
-**Note:** The setup script uses Socket.IO for configuration but the dashboard reads data via the public status page API for simplicity and reliability.
+Incident management for service outages:
+- Create, update, and resolve incidents
+- Severity levels: minor, major, critical
+- Status tracking: investigating, identified, monitoring, resolved
+- Automatic Pushover notifications
 
-### Future: Beszel Agent
-Can be integrated for more detailed system metrics and historical data.
+**Files:**
+- `/src/app/api/incidents/route.ts` - Incidents API
+
+**API Endpoints:**
+- `GET /api/incidents` - List all incidents
+- `GET /api/incidents?active=true` - List active incidents only
+- `POST /api/incidents` - Create new incident
+- `PATCH /api/incidents` - Update/resolve incident
+
+### SQLite Database
+**Status:** Active (replaced Beszel)
+
+The dashboard uses SQLite for persistent metrics storage:
+- **Location:** `/app/data/dashboard.db` (Docker volume: `dashboard-data`)
+- **Tables:**
+  - `metrics_live` - Raw metrics (5-second intervals, 24h retention)
+  - `metrics_hourly` - Hourly aggregates (7-day retention)
+  - `metrics_daily` - Daily aggregates (30-day retention)
+  - `container_stats` - Docker container metrics
+  - `service_status` - Service health history
+  - `notifications` - Alert history
+
+**API Endpoints:**
+- `GET /api/database` - Database statistics
+- `POST /api/database` - Trigger manual aggregation
+
+**Data Flow:**
+1. Metrics collector gathers data every 5/10/30 seconds
+2. Data stored in `metrics_live` table
+3. Hourly job aggregates to `metrics_hourly`, deletes old live data
+4. Daily job aggregates to `metrics_daily`, cleans up hourly data
 
 ## Troubleshooting
 

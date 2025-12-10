@@ -22,11 +22,13 @@ import {
 } from "lucide-react";
 
 type StatusFilter = "all" | "running" | "stopped";
+type SortOption = "cpu" | "memory" | "name";
 
 export function DockerContent() {
   const { containers, isRefreshing } = useData();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("cpu");
   const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set());
 
   const filteredContainers = useMemo(() => {
@@ -40,12 +42,28 @@ export function DockerContent() {
       filtered = filtered.filter(
         (c) =>
           c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.image.toLowerCase().includes(searchQuery.toLowerCase())
+          (c.image?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
       );
     }
 
-    return filtered;
-  }, [containers, statusFilter, searchQuery]);
+    // Sort containers
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "cpu":
+          return b.cpu - a.cpu; // Highest CPU first
+        case "memory":
+          const aMemPercent = (a.memory.used / a.memory.limit) * 100;
+          const bMemPercent = (b.memory.used / b.memory.limit) * 100;
+          return bMemPercent - aMemPercent; // Highest memory first
+        case "name":
+          return a.name.localeCompare(b.name); // Alphabetical
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [containers, statusFilter, searchQuery, sortBy]);
 
   const toggleExpanded = (id: string) => {
     const newExpanded = new Set(expandedContainers);
@@ -130,7 +148,7 @@ export function DockerContent() {
 
             {/* Search and Filter */}
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-3 lg:p-4 rounded-2xl mb-4 lg:mb-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3">
                 {/* Search */}
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -143,43 +161,88 @@ export function DockerContent() {
                   />
                 </div>
 
-                {/* Status Filter */}
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-gray-500" />
-                  <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/20">
-                    <button
-                      onClick={() => setStatusFilter("all")}
-                      className={cn(
-                        "px-3 py-2 text-xs font-medium transition-all",
-                        statusFilter === "all"
-                          ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
-                          : "text-gray-400 hover:text-white"
-                      )}
-                    >
-                      All
-                    </button>
-                    <button
-                      onClick={() => setStatusFilter("running")}
-                      className={cn(
-                        "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
-                        statusFilter === "running"
-                          ? "bg-emerald-500 text-white"
-                          : "text-gray-400 hover:text-white"
-                      )}
-                    >
-                      Running
-                    </button>
-                    <button
-                      onClick={() => setStatusFilter("stopped")}
-                      className={cn(
-                        "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
-                        statusFilter === "stopped"
-                          ? "bg-red-500 text-white"
-                          : "text-gray-400 hover:text-white"
-                      )}
-                    >
-                      Stopped
-                    </button>
+                {/* Filters and Sort */}
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                  {/* Status Filter */}
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs text-gray-500 hidden sm:inline">Status:</span>
+                    <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                      <button
+                        onClick={() => setStatusFilter("all")}
+                        className={cn(
+                          "px-3 py-2 text-xs font-medium transition-all",
+                          statusFilter === "all"
+                            ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setStatusFilter("running")}
+                        className={cn(
+                          "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
+                          statusFilter === "running"
+                            ? "bg-emerald-500 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        Running
+                      </button>
+                      <button
+                        onClick={() => setStatusFilter("stopped")}
+                        className={cn(
+                          "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
+                          statusFilter === "stopped"
+                            ? "bg-red-500 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        Stopped
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sort Options */}
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-xs text-gray-500 hidden sm:inline">Sort by:</span>
+                    <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                      <button
+                        onClick={() => setSortBy("cpu")}
+                        className={cn(
+                          "px-3 py-2 text-xs font-medium transition-all",
+                          sortBy === "cpu"
+                            ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        CPU
+                      </button>
+                      <button
+                        onClick={() => setSortBy("memory")}
+                        className={cn(
+                          "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
+                          sortBy === "memory"
+                            ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        Memory
+                      </button>
+                      <button
+                        onClick={() => setSortBy("name")}
+                        className={cn(
+                          "border-l border-white/10 px-3 py-2 text-xs font-medium transition-all",
+                          sortBy === "name"
+                            ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                            : "text-gray-400 hover:text-white"
+                        )}
+                      >
+                        Name
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

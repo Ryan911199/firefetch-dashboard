@@ -9,7 +9,6 @@ import {
   Settings,
   ExternalLink,
   Zap,
-  BarChart2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -121,23 +120,6 @@ export function Sidebar() {
             </div>
           </div>
         )}
-
-        {/* External Tools */}
-        <div className="mt-8">
-          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 pl-3">
-            External Tools
-          </h4>
-          <a
-            href="https://beszel.firefetch.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 w-full p-3 rounded-xl text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all duration-300 group"
-          >
-            <BarChart2 size={18} className="shrink-0 text-cyan-400 group-hover:text-cyan-300" />
-            <span className="text-sm font-medium">Beszel</span>
-            <ExternalLink size={12} className="ml-auto text-gray-600 group-hover:text-gray-400" />
-          </a>
-        </div>
 
         {/* System Status */}
         <div className="mt-6">
