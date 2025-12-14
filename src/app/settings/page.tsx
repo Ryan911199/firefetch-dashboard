@@ -378,8 +378,6 @@ export default function SettingsPage() {
                   <div className="grid gap-2">
                     {[
                       { name: "Appwrite Console", url: "https://backend.firefetch.org/console" },
-                      { name: "Uptime Kuma", url: "https://status.firefetch.org" },
-                      { name: "Beszel Metrics", url: "https://beszel.firefetch.org" },
                     ].map((service) => (
                       <a
                         key={service.name}

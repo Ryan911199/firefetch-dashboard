@@ -10,8 +10,6 @@ import {
   RefreshCw,
   ExternalLink,
   Database,
-  Activity,
-  TrendingUp,
   Check,
   X,
 } from "lucide-react";
@@ -56,23 +54,9 @@ export const QuickActions = memo(function QuickActions({
     {
       id: "appwrite",
       name: "Appwrite Console",
-      url: "https://appwrite.firefetch.org",
+      url: "https://backend.firefetch.org/console",
       icon: Database,
       description: "Backend services",
-    },
-    {
-      id: "beszel",
-      name: "Beszel Monitoring",
-      url: "https://beszel.firefetch.org",
-      icon: Activity,
-      description: "System monitoring",
-    },
-    {
-      id: "uptime",
-      name: "Uptime Kuma",
-      url: "https://status.firefetch.org",
-      icon: TrendingUp,
-      description: "Service uptime",
     },
   ];
 

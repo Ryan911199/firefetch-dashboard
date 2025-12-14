@@ -2,23 +2,25 @@
 
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
+  Rocket,
   Server,
   Container,
   Activity,
   Settings,
   ExternalLink,
   Zap,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/contexts/settings-context";
 
 const navigation = [
-  { name: "Overview", href: "/", icon: LayoutDashboard },
+  { name: "Projects", href: "/", icon: Rocket },
+  { name: "Monitoring", href: "/monitoring", icon: Activity },
   { name: "Services", href: "/services", icon: Server },
   { name: "Docker", href: "/docker", icon: Container },
-  { name: "Metrics", href: "/metrics", icon: Activity },
+  { name: "Metrics", href: "/metrics", icon: BarChart3 },
 ];
 
 interface SidebarItemProps {

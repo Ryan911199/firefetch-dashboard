@@ -50,12 +50,6 @@ export const DEFAULT_SETTINGS: DashboardSettings = {
       url: "https://backend.firefetch.org/console",
       external: true,
     },
-    {
-      id: "uptime-kuma",
-      name: "Uptime Kuma",
-      url: "https://status.firefetch.org",
-      external: true,
-    },
   ],
   version: "1.0.0",
 };

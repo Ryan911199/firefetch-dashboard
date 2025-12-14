@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
+  Rocket,
   Server,
   Container,
   Activity,
@@ -12,17 +12,25 @@ import {
   Menu,
   X,
   Zap,
-  BarChart2,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/contexts/settings-context";
 
 const navigation = [
-  { name: "Overview", href: "/", icon: LayoutDashboard },
+  { name: "Projects", href: "/", icon: Rocket },
+  { name: "Monitoring", href: "/monitoring", icon: Activity },
   { name: "Services", href: "/services", icon: Server },
   { name: "Docker", href: "/docker", icon: Container },
-  { name: "Metrics", href: "/metrics", icon: Activity },
+];
+
+const menuNavigation = [
+  { name: "Projects", href: "/", icon: Rocket },
+  { name: "Monitoring", href: "/monitoring", icon: Activity },
+  { name: "Services", href: "/services", icon: Server },
+  { name: "Docker", href: "/docker", icon: Container },
+  { name: "Metrics", href: "/metrics", icon: BarChart3 },
 ];
 
 export function MobileNav() {
@@ -133,7 +141,7 @@ export function MobileNav() {
               Navigation
             </p>
             <div className="space-y-1">
-              {navigation.map((item, index) => {
+              {menuNavigation.map((item, index) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
@@ -190,23 +198,6 @@ export function MobileNav() {
                 </div>
               </>
             )}
-
-            {/* External Tools */}
-            <div className="mt-6">
-              <p className="px-3 mb-3 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                External Tools
-              </p>
-              <a
-                href="https://beszel.firefetch.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 w-full p-3 rounded-xl text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all duration-300 group"
-              >
-                <BarChart2 className="h-5 w-5 shrink-0 text-cyan-400 group-hover:text-cyan-300" />
-                <span className="text-sm font-medium">Beszel</span>
-                <ExternalLink className="h-3 w-3 ml-auto text-gray-600 group-hover:text-gray-400" />
-              </a>
-            </div>
 
             {/* System Status */}
             <div className="mt-6">
